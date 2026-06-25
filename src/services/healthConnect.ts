@@ -3,6 +3,7 @@ import {
   getSdkStatus,
   initialize,
   insertRecords,
+  openHealthConnectSettings,
   readRecords,
   requestPermission,
   SdkAvailabilityStatus,
@@ -15,6 +16,10 @@ const PERMISSIONS = [
   { accessType: 'read', recordType: 'ActiveCaloriesBurned' },
 ] as const;
 
+export type SyncResult =
+  | { ok: true; activeKcal: number }
+  | { ok: false; reason: 'unavailable' | 'denied' | 'error'; message?: string };
+
 function dayBounds(dateKey: string): { start: string; end: string } {
   const start = new Date(`${dateKey}T00:00:00`);
   const end = new Date(start.getTime());
@@ -26,7 +31,15 @@ export function isAndroid(): boolean {
   return Platform.OS === 'android';
 }
 
-export async function isHealthConnectAvailable(): Promise<boolean> {
+export function openSettings(): void {
+  try {
+    openHealthConnectSettings();
+  } catch {
+    // ignore
+  }
+}
+
+async function ensureReady(): Promise<boolean> {
   if (!isAndroid()) {
     return false;
   }
@@ -38,39 +51,69 @@ export async function isHealthConnectAvailable(): Promise<boolean> {
   return status === SdkAvailabilityStatus.SDK_AVAILABLE;
 }
 
-export async function ensurePermissions(): Promise<boolean> {
-  const granted = await requestPermission(
-    PERMISSIONS.map((permission) => ({ ...permission })),
-  );
-  return granted.length > 0;
+export async function isHealthConnectAvailable(): Promise<boolean> {
+  try {
+    return await ensureReady();
+  } catch {
+    return false;
+  }
 }
 
-export async function writeDailyNutrition(
+export async function syncDay(
   dateKey: string,
   totals: DailyTotals,
-): Promise<void> {
-  const { start, end } = dayBounds(dateKey);
-  await insertRecords([
-    {
-      recordType: 'Nutrition',
-      mealType: 0,
-      startTime: start,
-      endTime: end,
-      energy: { unit: 'kilocalories', value: totals.kcal },
-      protein: { unit: 'grams', value: totals.proteinG },
-      totalCarbohydrate: { unit: 'grams', value: totals.carbG },
-      totalFat: { unit: 'grams', value: totals.fatG },
-    },
-  ]);
-}
+): Promise<SyncResult> {
+  try {
+    const ready = await ensureReady();
+    if (!ready) {
+      return { ok: false, reason: 'unavailable' };
+    }
 
-export async function readActiveCalories(dateKey: string): Promise<number> {
-  const { start, end } = dayBounds(dateKey);
-  const result = await readRecords('ActiveCaloriesBurned', {
-    timeRangeFilter: { operator: 'between', startTime: start, endTime: end },
-  });
-  return result.records.reduce(
-    (sum, record) => sum + record.energy.inKilocalories,
-    0,
-  );
+    const granted = await requestPermission(
+      PERMISSIONS.map((permission) => ({ ...permission })),
+    );
+    if (!granted || granted.length === 0) {
+      return { ok: false, reason: 'denied' };
+    }
+
+    const { start, end } = dayBounds(dateKey);
+
+    await insertRecords([
+      {
+        recordType: 'Nutrition',
+        mealType: 0,
+        startTime: start,
+        endTime: end,
+        energy: { unit: 'kilocalories', value: totals.kcal },
+        protein: { unit: 'grams', value: totals.proteinG },
+        totalCarbohydrate: { unit: 'grams', value: totals.carbG },
+        totalFat: { unit: 'grams', value: totals.fatG },
+      },
+    ]);
+
+    let activeKcal = 0;
+    try {
+      const result = await readRecords('ActiveCaloriesBurned', {
+        timeRangeFilter: {
+          operator: 'between',
+          startTime: start,
+          endTime: end,
+        },
+      });
+      activeKcal = result.records.reduce(
+        (sum, record) => sum + (record.energy?.inKilocalories ?? 0),
+        0,
+      );
+    } catch {
+      activeKcal = 0;
+    }
+
+    return { ok: true, activeKcal };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: 'error',
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
