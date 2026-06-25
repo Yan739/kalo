@@ -1,25 +1,28 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { Card } from '@/components/Card';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { Accent, Spacing } from '@/constants/theme';
 import {
+  importHealth,
   isAndroid,
   isHealthConnectAvailable,
   openSettings,
   syncDay,
+  type SyncResult,
 } from '@/services/healthConnect';
 import { useDayStore } from '@/store/useDayStore';
 
-type Status = 'idle' | 'syncing' | 'done' | 'unavailable' | 'denied' | 'error';
+type Status = 'idle' | 'busy' | 'done' | 'unavailable' | 'denied' | 'error';
 
 export function HealthSync() {
   const date = useDayStore((state) => state.date);
   const totals = useDayStore((state) => state.totals);
+  const setHealth = useDayStore((state) => state.setHealth);
 
   const [available, setAvailable] = useState<boolean | null>(null);
-  const [activeKcal, setActiveKcal] = useState<number | null>(null);
   const [status, setStatus] = useState<Status>('idle');
   const [message, setMessage] = useState<string | null>(null);
 
@@ -37,12 +40,12 @@ export function HealthSync() {
     return null;
   }
 
-  const onSync = async () => {
-    setStatus('syncing');
+  const handle = (run: () => Promise<SyncResult>) => async () => {
+    setStatus('busy');
     setMessage(null);
-    const result = await syncDay(date, totals);
+    const result = await run();
     if (result.ok) {
-      setActiveKcal(result.activeKcal);
+      setHealth(result.snapshot);
       setAvailable(true);
       setStatus('done');
       return;
@@ -59,69 +62,76 @@ export function HealthSync() {
   const statusLine = (() => {
     switch (status) {
       case 'done':
-        return 'Journal envoye vers Health Connect.';
-      case 'syncing':
-        return 'Synchronisation...';
+        return 'Synchronise avec Samsung Health.';
+      case 'busy':
+        return 'Connexion a Health Connect...';
       case 'denied':
-        return 'Autorisations refusees. Reessayez et acceptez dans Health Connect.';
+        return 'Autorisations refusees. Acceptez-les dans Health Connect.';
       case 'unavailable':
         return 'Health Connect indisponible. Installez-le et liez Samsung Health.';
       case 'error':
         return `Erreur : ${message ?? 'inconnue'}`;
       default:
-        return 'Envoyer les totaux du jour et lire les calories actives.';
+        return 'Importez vos pas, calories actives et poids, ou envoyez votre journal.';
     }
   })();
 
+  const busy = status === 'busy';
+
   return (
-    <ThemedView type="backgroundElement" style={styles.card}>
+    <Card>
       <View style={styles.header}>
-        <ThemedText type="smallBold">Montre & Health Connect</ThemedText>
-        {activeKcal !== null && (
-          <ThemedText type="small" themeColor="textSecondary">
-            {Math.round(activeKcal)} kcal actives
-          </ThemedText>
-        )}
+        <View style={styles.titleRow}>
+          <Ionicons name="watch-outline" size={18} color={Accent.primary} />
+          <ThemedText type="smallBold">Samsung Health</ThemedText>
+        </View>
       </View>
 
-      <ThemedText type="small" themeColor="textSecondary">
+      <ThemedText type="small" themeColor="textSecondary" style={styles.status}>
         {statusLine}
       </ThemedText>
 
       <View style={styles.actions}>
         <Pressable
-          onPress={onSync}
-          disabled={status === 'syncing'}
+          onPress={handle(() => importHealth(date))}
+          disabled={busy}
           style={[styles.button, { backgroundColor: Accent.primary }]}>
-          <ThemedText type="smallBold" style={{ color: '#ffffff' }}>
-            {status === 'syncing' ? 'Synchronisation...' : 'Synchroniser'}
+          <ThemedText type="smallBold" style={styles.white}>
+            Importer mes donnees
           </ThemedText>
         </Pressable>
-
-        {(status === 'unavailable' || available === false) && (
-          <Pressable
-            onPress={openSettings}
-            style={[styles.buttonGhost, { borderColor: Accent.primary }]}>
-            <ThemedText type="smallBold" style={{ color: Accent.primary }}>
-              Ouvrir Health Connect
-            </ThemedText>
-          </Pressable>
-        )}
+        <Pressable
+          onPress={handle(() => syncDay(date, totals))}
+          disabled={busy}
+          style={[styles.buttonGhost, { borderColor: Accent.primary }]}>
+          <ThemedText type="smallBold" style={{ color: Accent.primary }}>
+            Envoyer le journal
+          </ThemedText>
+        </Pressable>
       </View>
-    </ThemedView>
+
+      {(status === 'unavailable' || available === false) && (
+        <Pressable onPress={openSettings} style={styles.link}>
+          <ThemedText type="smallBold" style={{ color: Accent.primary }}>
+            Ouvrir Health Connect
+          </ThemedText>
+        </Pressable>
+      )}
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 16,
-    padding: Spacing.three,
-    gap: Spacing.two,
-  },
   header: {
+    marginBottom: Spacing.two,
+  },
+  titleRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: Spacing.one,
+  },
+  status: {
+    marginBottom: Spacing.three,
   },
   actions: {
     flexDirection: 'row',
@@ -141,5 +151,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  link: {
+    marginTop: Spacing.two,
+    alignItems: 'center',
+  },
+  white: {
+    color: '#ffffff',
   },
 });

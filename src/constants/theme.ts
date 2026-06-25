@@ -28,10 +28,14 @@ export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 
 export const Accent = {
   primary: '#208AEF',
+  primarySoft: '#E7F1FE',
   danger: '#E5484D',
+  success: '#2FB344',
   protein: '#3E63DD',
   carb: '#F5A623',
   fat: '#E5484D',
+  energy: '#FF7A45',
+  steps: '#12B886',
   ring: '#208AEF',
   ringOver: '#E5484D',
 } as const;
