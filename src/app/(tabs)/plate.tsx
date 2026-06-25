@@ -8,9 +8,33 @@ import { ThemedView } from '@/components/themed-view';
 import { Accent, Spacing } from '@/constants/theme';
 import { humanizeLabel, nutritionForLabel } from '@/constants/foodNutrition';
 import { useTheme } from '@/hooks/use-theme';
-import { classifyPlate, MissingHfTokenError, type PlateGuess } from '@/services/huggingface';
+import {
+  classifyPlate,
+  HfHttpError,
+  MissingHfTokenError,
+  type PlateGuess,
+} from '@/services/huggingface';
 import { scaleNutrient } from '@/services/nutrition';
 import { useDayStore } from '@/store/useDayStore';
+
+function describeError(err: unknown): string {
+  if (err instanceof MissingHfTokenError) {
+    return 'Token HuggingFace absent. Definir EXPO_PUBLIC_HF_TOKEN.';
+  }
+  if (err instanceof HfHttpError) {
+    if (err.status === 401 || err.status === 403) {
+      return 'Token HuggingFace invalide ou revoque. Regenerez-le.';
+    }
+    if (err.status === 404) {
+      return 'Modele indisponible sur HuggingFace (404).';
+    }
+    if (err.status === 503) {
+      return 'Modele en cours de chargement. Reessayez dans un instant.';
+    }
+    return `Erreur HuggingFace (${err.status}).`;
+  }
+  return 'Echec reseau. Verifiez la connexion internet.';
+}
 
 export default function PlateScreen() {
   const theme = useTheme();
@@ -46,11 +70,7 @@ export default function PlateScreen() {
         setError('Aucun aliment reconnu.');
       }
     } catch (err) {
-      setError(
-        err instanceof MissingHfTokenError
-          ? err.message
-          : 'Echec de la reconnaissance. Verifiez la connexion.',
-      );
+      setError(describeError(err));
     } finally {
       setLoading(false);
     }

@@ -10,6 +10,16 @@ export class MissingHfTokenError extends Error {
   }
 }
 
+export class HfHttpError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly body: string,
+  ) {
+    super(`HuggingFace HTTP ${status}`);
+    this.name = 'HfHttpError';
+  }
+}
+
 interface HfClassification {
   label: string;
   score: number;
@@ -31,59 +41,82 @@ function getModel(): string {
   return process.env.EXPO_PUBLIC_HF_MODEL ?? DEFAULT_MODEL;
 }
 
+function endpoints(model: string): string[] {
+  return [
+    `https://router.huggingface.co/hf-inference/models/${model}`,
+    `https://api-inference.huggingface.co/models/${model}`,
+  ];
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function callEndpoint(
+  url: string,
+  token: string,
+  blob: Blob,
+): Promise<HfClassification[]> {
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': blob.type || 'image/jpeg',
+        'x-wait-for-model': 'true',
+      },
+      body: blob,
+    });
+
+    if (response.status === 503 && attempt < MAX_RETRIES) {
+      const wait = await response
+        .json()
+        .then((b: { estimated_time?: number }) =>
+          typeof b.estimated_time === 'number'
+            ? Math.min(b.estimated_time * 1000, 20000)
+            : DEFAULT_WAIT_MS,
+        )
+        .catch(() => DEFAULT_WAIT_MS);
+      await delay(wait);
+      continue;
+    }
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new HfHttpError(response.status, body.slice(0, 200));
+    }
+
+    const data = (await response.json()) as HfClassification[];
+    if (!Array.isArray(data)) {
+      throw new HfHttpError(200, 'Reponse inattendue');
+    }
+    return data;
+  }
+  throw new HfHttpError(503, 'Modele toujours en chargement');
 }
 
 export async function classifyPlate(imageUri: string): Promise<PlateGuess[]> {
   const token = getToken();
   const model = getModel();
-
   const imageResponse = await fetch(imageUri);
   const blob = await imageResponse.blob();
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
-    const response = await fetch(
-      `https://api-inference.huggingface.co/models/${model}`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': blob.type || 'image/jpeg',
-          'x-wait-for-model': 'true',
-        },
-        body: blob,
-      },
-    );
-
-    // 503 = modele en cours de chargement (cold start). On attend et on reessaie.
-    if (response.status === 503 && attempt < MAX_RETRIES) {
-      const estimated = await response
-        .json()
-        .then((body: { estimated_time?: number }) =>
-          typeof body.estimated_time === 'number'
-            ? Math.min(body.estimated_time * 1000, 20000)
-            : DEFAULT_WAIT_MS,
-        )
-        .catch(() => DEFAULT_WAIT_MS);
-      await delay(estimated);
-      continue;
+  let lastError: unknown;
+  for (const url of endpoints(model)) {
+    try {
+      const data = await callEndpoint(url, token, blob);
+      return data
+        .map((item) => ({ label: item.label, score: item.score }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5);
+    } catch (error) {
+      lastError = error;
+      // 404 = modele absent de cet endpoint : on tente le suivant.
+      if (error instanceof HfHttpError && error.status === 404) {
+        continue;
+      }
+      throw error;
     }
-
-    if (!response.ok) {
-      throw new Error(`HuggingFace HTTP ${response.status}`);
-    }
-
-    const data = (await response.json()) as HfClassification[];
-    if (!Array.isArray(data)) {
-      throw new Error('Reponse HuggingFace inattendue');
-    }
-
-    return data
-      .map((item) => ({ label: item.label, score: item.score }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5);
   }
-
-  throw new Error('HuggingFace indisponible (modele toujours en chargement).');
+  throw lastError ?? new HfHttpError(404, 'Modele introuvable');
 }
