@@ -72,4 +72,17 @@ proteines / glucides / lipides). Testable isolement.
 
 ## Donnees externes
 
-Source unique en Phase 1 : l'API publique Open Food Facts. Un appel corres
+Source unique en Phase 1 : l'API publique Open Food Facts. Un appel correspond
+a un scan reel ; chaque produit scanne est mis en cache local (table `food`)
+pour eviter de re-interroger un code-barres deja connu. L'application fonctionne
+hors connexion pour tout, sauf le premier scan d'un produit non encore en cache.
+
+## Perimetre Phase 1
+
+Inclus : profil et objectifs, scan et ajout au journal, ecran du jour avec
+totaux vs objectif et barres de macros, suppression d'une entree, persistance
+SQLite.
+
+Hors scope : IA (langage naturel, photo, HuggingFace), proxy Cloudflare Workers,
+recherche texte, favoris, historique multi-jours, graphes, authentification et
+synchronisation cloud.
