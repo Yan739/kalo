@@ -14,10 +14,20 @@ import type { DailyTotals } from '@/types/domain';
 const PERMISSIONS = [
   { accessType: 'write', recordType: 'Nutrition' },
   { accessType: 'read', recordType: 'ActiveCaloriesBurned' },
+  { accessType: 'read', recordType: 'TotalCaloriesBurned' },
+  { accessType: 'read', recordType: 'Steps' },
+  { accessType: 'read', recordType: 'Weight' },
 ] as const;
 
+export interface HealthSnapshot {
+  steps: number;
+  activeKcal: number;
+  totalKcal: number;
+  weightKg: number | null;
+}
+
 export type SyncResult =
-  | { ok: true; activeKcal: number }
+  | { ok: true; snapshot: HealthSnapshot }
   | { ok: false; reason: 'unavailable' | 'denied' | 'error'; message?: string };
 
 function dayBounds(dateKey: string): { start: string; end: string } {
@@ -59,25 +69,98 @@ export async function isHealthConnectAvailable(): Promise<boolean> {
   }
 }
 
-export async function syncDay(
-  dateKey: string,
-  totals: DailyTotals,
-): Promise<SyncResult> {
+async function readSnapshot(dateKey: string): Promise<HealthSnapshot> {
+  const { start, end } = dayBounds(dateKey);
+  const between = { operator: 'between', startTime: start, endTime: end } as const;
+
+  const safeRead = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
+    try {
+      return await fn();
+    } catch {
+      return fallback;
+    }
+  };
+
+  const steps = await safeRead(async () => {
+    const r = await readRecords('Steps', { timeRangeFilter: between });
+    return r.records.reduce((sum, rec) => sum + rec.count, 0);
+  }, 0);
+
+  const activeKcal = await safeRead(async () => {
+    const r = await readRecords('ActiveCaloriesBurned', {
+      timeRangeFilter: between,
+    });
+    return r.records.reduce(
+      (sum, rec) => sum + (rec.energy?.inKilocalories ?? 0),
+      0,
+    );
+  }, 0);
+
+  const totalKcal = await safeRead(async () => {
+    const r = await readRecords('TotalCaloriesBurned', {
+      timeRangeFilter: between,
+    });
+    return r.records.reduce(
+      (sum, rec) => sum + (rec.energy?.inKilocalories ?? 0),
+      0,
+    );
+  }, 0);
+
+  const weightKg = await safeRead<number | null>(async () => {
+    const monthAgo = new Date(start);
+    monthAgo.setDate(monthAgo.getDate() - 30);
+    const r = await readRecords('Weight', {
+      timeRangeFilter: {
+        operator: 'between',
+        startTime: monthAgo.toISOString(),
+        endTime: end,
+      },
+    });
+    if (r.records.length === 0) {
+      return null;
+    }
+    const last = r.records[r.records.length - 1];
+    return last.weight?.inKilograms ?? null;
+  }, null);
+
+  return { steps, activeKcal, totalKcal, weightKg };
+}
+
+async function withPermissions<T>(
+  action: () => Promise<T>,
+): Promise<SyncResult & { value?: T }> {
   try {
     const ready = await ensureReady();
     if (!ready) {
       return { ok: false, reason: 'unavailable' };
     }
-
     const granted = await requestPermission(
       PERMISSIONS.map((permission) => ({ ...permission })),
     );
     if (!granted || granted.length === 0) {
       return { ok: false, reason: 'denied' };
     }
+    const value = await action();
+    return { ok: true, snapshot: value as HealthSnapshot, value };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: 'error',
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
 
-    const { start, end } = dayBounds(dateKey);
+export function importHealth(dateKey: string): Promise<SyncResult> {
+  return withPermissions(() => readSnapshot(dateKey));
+}
 
+export function syncDay(
+  dateKey: string,
+  totals: DailyTotals,
+): Promise<SyncResult> {
+  const { start, end } = dayBounds(dateKey);
+  return withPermissions(async () => {
     await insertRecords([
       {
         recordType: 'Nutrition',
@@ -90,30 +173,6 @@ export async function syncDay(
         totalFat: { unit: 'grams', value: totals.fatG },
       },
     ]);
-
-    let activeKcal = 0;
-    try {
-      const result = await readRecords('ActiveCaloriesBurned', {
-        timeRangeFilter: {
-          operator: 'between',
-          startTime: start,
-          endTime: end,
-        },
-      });
-      activeKcal = result.records.reduce(
-        (sum, record) => sum + (record.energy?.inKilocalories ?? 0),
-        0,
-      );
-    } catch {
-      activeKcal = 0;
-    }
-
-    return { ok: true, activeKcal };
-  } catch (error) {
-    return {
-      ok: false,
-      reason: 'error',
-      message: error instanceof Error ? error.message : String(error),
-    };
-  }
+    return readSnapshot(dateKey);
+  });
 }
