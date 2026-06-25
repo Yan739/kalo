@@ -2,6 +2,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { HealthSync } from '@/components/HealthSync';
 import { MacroBar } from '@/components/MacroBar';
 import { NutritionRing } from '@/components/NutritionRing';
 import { ThemedText } from '@/components/themed-text';
@@ -63,6 +64,8 @@ export default function TodayScreen() {
             color={Accent.fat}
           />
         </ThemedView>
+
+        <HealthSync />
 
         <ThemedText type="subtitle">Journal du jour</ThemedText>
 
