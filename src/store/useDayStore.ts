@@ -8,8 +8,10 @@ import {
   totalsByDate,
 } from '@/db/repositories/logRepo';
 import { todayKey } from '@/services/date';
+import type { HealthSnapshot } from '@/services/healthConnect';
 import type {
   DailyTotals,
+  Goal,
   LogEntry,
   MacroGrams,
   NewLogEntry,
@@ -24,10 +26,14 @@ interface DayState {
   totals: DailyTotals;
   targetKcal: number;
   targetMacros: MacroGrams;
+  goal: Goal | null;
+  hasProfile: boolean;
+  health: HealthSnapshot | null;
   loading: boolean;
   loadDay: (date?: string) => Promise<void>;
   addEntry: (entry: Omit<NewLogEntry, 'logDate'>) => Promise<void>;
   removeEntry: (id: number) => Promise<void>;
+  setHealth: (snapshot: HealthSnapshot) => void;
 }
 
 export const useDayStore = create<DayState>((set, get) => ({
@@ -36,6 +42,9 @@ export const useDayStore = create<DayState>((set, get) => ({
   totals: EMPTY_TOTALS,
   targetKcal: 0,
   targetMacros: EMPTY_MACROS,
+  goal: null,
+  hasProfile: false,
+  health: null,
   loading: false,
 
   loadDay: async (date) => {
@@ -51,6 +60,8 @@ export const useDayStore = create<DayState>((set, get) => ({
       totals,
       targetKcal: stored?.targets.targetKcal ?? 0,
       targetMacros: stored?.targets.macros ?? EMPTY_MACROS,
+      goal: stored?.profile.goal ?? null,
+      hasProfile: stored !== null,
       loading: false,
     });
   },
@@ -74,4 +85,6 @@ export const useDayStore = create<DayState>((set, get) => ({
     ]);
     set({ entries, totals });
   },
+
+  setHealth: (snapshot) => set({ health: snapshot }),
 }));
