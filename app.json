@@ -22,7 +22,9 @@
       "versionCode": 1,
       "permissions": [
         "android.permission.health.WRITE_NUTRITION",
-        "android.permission.health.READ_ACTIVE_CALORIES_BURNED"
+        "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -69,6 +71,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "d2855741-5ac6-46ce-9b28-aad0c7db482d"
+      }
+    },
+    "owner": "yann_ngateu"
   }
 }
