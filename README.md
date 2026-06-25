@@ -1,56 +1,75 @@
-# Welcome to your Expo app 👋
+# Kalo
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Tracker calorique personnel, offline-first, equivalent gratuit de Yazio pour un usage mono-utilisateur. Construit avec Expo et React Native.
 
-## Get started
+## Stack
 
-1. Install dependencies
+- Expo (managed workflow), SDK 56
+- TypeScript strict
+- expo-router (navigation par onglets)
+- expo-camera (scan de code-barres)
+- expo-sqlite (persistance locale)
+- @tanstack/react-query (cache des appels Open Food Facts)
+- zustand (etat global du jour)
 
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Installation
 
 ```bash
-npm run reset-project
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Si une dependance native manque apres un clone, reinstaller les versions alignees au SDK :
 
-### Other setup steps
+```bash
+npx expo install
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+## Lancer l'application
 
-## Learn more
+```bash
+npx expo start
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+Puis ouvrir sur un appareil ou un simulateur (`i` pour iOS, `a` pour Android).
+Le scan de code-barres requiert un appareil reel ou un build avec la camera ;
+expo-camera fonctionne dans Expo Go.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Architecture
 
-## Join the community
+```
+src/
+  app/
+    _layout.tsx            providers (React Query, theme) + Stack
+    (tabs)/
+      _layout.tsx          navigation a 3 onglets
+      index.tsx            ecran Aujourd'hui
+      scan.tsx             scan code-barres + ajout au journal
+      profile.tsx          profil et objectifs
+  db/
+    schema.ts              tables + migrations versionnees
+    client.ts              ouverture SQLite + helpers de requete
+    repositories/          profileRepo, logRepo, foodCacheRepo
+  services/
+    nutrition.ts           moteur calorique (fonctions pures)
+    openfoodfacts.ts       client API Open Food Facts
+    date.ts                cle de date locale
+  store/
+    useDayStore.ts         totaux du jour, objectif, refresh
+  hooks/
+    use-product.ts         React Query (cache local puis OFF)
+  types/
+    domain.ts              Profile, FoodItem, LogEntry, DailyTotals
+  components/
+    MacroBar, NutritionRing, QuantityInput, OptionGroup
+```
 
-Join our community of developers creating universal apps.
+## Moteur calorique
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+`src/services/nutrition.ts` regroupe des fonctions pures (sans UI ni DB) :
+BMR (Mifflin-St Jeor), TDEE par facteur d'activite, objectif kcal par
+ajustement, et repartition des macros (defaut 30 / 40 / 30 pour
+proteines / glucides / lipides). Testable isolement.
+
+## Donnees externes
+
+Source unique en Phase 1 : l'API publique Open Food Facts. Un appel corres
