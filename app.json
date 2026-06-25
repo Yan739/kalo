@@ -19,7 +19,11 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.yann.kalo",
-      "versionCode": 1
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.health.WRITE_NUTRITION",
+        "android.permission.health.READ_ACTIVE_CALORIES_BURNED"
+      ]
     },
     "web": {
       "output": "static",
@@ -41,6 +45,24 @@
         "expo-camera",
         {
           "cameraPermission": "Kalo utilise la camera pour scanner les codes-barres des produits."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Kalo accede a vos photos pour analyser une assiette.",
+          "cameraPermission": "Kalo utilise la camera pour photographier une assiette."
+        }
+      ],
+      "react-native-health-connect",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "minSdkVersion": 26
+          }
         }
       ]
     ],
