@@ -111,7 +111,7 @@ export async function classifyPlate(imageUri: string): Promise<PlateGuess[]> {
         .slice(0, 5);
     } catch (error) {
       lastError = error;
-      // 404 = modele absent de cet endpoint : on tente le suivant.
+      // 404 = model not served by this endpoint: try the next one.
       if (error instanceof HfHttpError && error.status === 404) {
         continue;
       }

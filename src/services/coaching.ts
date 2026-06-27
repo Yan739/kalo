@@ -62,9 +62,9 @@ export function goalAdvice(goal: Goal): GoalAdvice {
   };
 }
 
-// Budget ajuste : on ajoute les calories actives (sport) au budget du jour,
-// pour les objectifs de maintien et de prise. En perte, on en rend la moitie
-// afin de preserver le deficit.
+// Adjusted budget: active (workout) calories are added to the daily budget
+// for maintain and gain goals. For loss goals only half is added back, to
+// preserve the deficit.
 export function adjustedTarget(
   targetKcal: number,
   activeKcal: number,

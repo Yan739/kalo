@@ -6,8 +6,8 @@ export interface FoodNutrition {
   defaultGrams: number;
 }
 
-// Valeurs approximatives par 100 g pour les 101 classes Food-101 (modele
-// nateraw/food). Estimations indicatives, a affiner via la quantite.
+// Approximate values per 100 g for the 101 Food-101 classes (model
+// nateraw/food). Rough estimates, refined by the user via the quantity.
 const TABLE: Record<string, FoodNutrition> = {
   apple_pie: { kcal: 237, protein: 2, carb: 34, fat: 11, defaultGrams: 125 },
   baby_back_ribs: { kcal: 292, protein: 24, carb: 2, fat: 21, defaultGrams: 200 },
